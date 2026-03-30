@@ -8,7 +8,7 @@ define('DB_PORT',    '3306');
 define('DB_NAME',    'caisse');
 define('DB_USER',    'root');   // <-- Changer si besoin
 define('DB_PASS',    '');       // <-- Changer si besoin
-define('DB_CHARSET', 'latin1'); // charset de la base Java
+define('DB_CHARSET', 'utf8'); // MySQL convertit latin1→utf8 automatiquement
 
 // ============================================================
 //  SCHÉMA RÉEL (base caisse Java Swing)

@@ -53,10 +53,11 @@ $nbFaible    = (int)$pdo->query("SELECT COUNT(*) FROM article WHERE stock > 0 AN
 
 $stmtTop = $pdo->prepare("
     SELECT av.nom, SUM(av.quantite) AS qte_vendue,
-           SUM(av.quantite * av.prixVenteUnite) AS ca_article
+           SUM(av.quantite * av.prixVenteUnite) AS ca_article,
+           SUM(av.quantite * (av.prixVenteUnite - av.prixAchatUnite)) AS marge_article
     FROM articlevente av JOIN vente v ON v.idVente = av.idVente
     WHERE DATE(v.dateVente) BETWEEN ? AND ?
-    GROUP BY av.code, av.nom ORDER BY qte_vendue DESC LIMIT 5
+    GROUP BY av.code, av.nom ORDER BY marge_article DESC LIMIT 5
 ");
 $stmtTop->execute(array($dateDebut, $dateFin));
 $topArticles = $stmtTop->fetchAll();
@@ -88,16 +89,56 @@ for ($i = 29; $i >= 0; $i--) {
 
 // Graphique ventes par heure
 $heureRows = $pdo->query("
-    SELECT HOUR(dateVente) AS heure, COUNT(*) AS nb FROM vente
+    SELECT HOUR(dateVente) AS heure, COUNT(*) AS nb,
+           COALESCE(SUM(totale), 0) AS ca,
+           COALESCE(SUM(marge),  0) AS marge
+    FROM vente
     WHERE dateVente >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
     GROUP BY HOUR(dateVente) ORDER BY heure
 ")->fetchAll();
 $heureMap = array();
-foreach ($heureRows as $r) { $heureMap[(int)$r['heure']] = (int)$r['nb']; }
-$labelsHeure = array(); $dataHeure = array();
+foreach ($heureRows as $r) {
+    $heureMap[(int)$r['heure']] = array(
+        'nb'    => (int)$r['nb'],
+        'ca'    => round((float)$r['ca'],    2),
+        'marge' => round((float)$r['marge'], 2),
+    );
+}
+$labelsHeure = array();
+$dataHeureNb = array(); $dataHeureCa = array(); $dataHeureMarge = array();
 for ($h = 0; $h <= 23; $h++) {
-    $labelsHeure[] = str_pad($h, 2, '0', STR_PAD_LEFT) . 'h';
-    $dataHeure[]   = isset($heureMap[$h]) ? $heureMap[$h] : 0;
+    $labelsHeure[]    = str_pad($h, 2, '0', STR_PAD_LEFT) . 'h';
+    $dataHeureNb[]    = isset($heureMap[$h]) ? $heureMap[$h]['nb']    : 0;
+    $dataHeureCa[]    = isset($heureMap[$h]) ? $heureMap[$h]['ca']    : 0;
+    $dataHeureMarge[] = isset($heureMap[$h]) ? $heureMap[$h]['marge'] : 0;
+}
+
+// Graphique ventes par jour de la semaine
+$jourRows = $pdo->query("
+    SELECT DAYOFWEEK(dateVente) AS jour_num, COUNT(*) AS nb,
+           COALESCE(SUM(totale), 0) AS ca,
+           COALESCE(SUM(marge),  0) AS marge
+    FROM vente
+    WHERE dateVente >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+    GROUP BY DAYOFWEEK(dateVente)
+")->fetchAll();
+$jourMap = array();
+foreach ($jourRows as $r) {
+    $jourMap[(int)$r['jour_num']] = array(
+        'nb'    => (int)$r['nb'],
+        'ca'    => round((float)$r['ca'],    2),
+        'marge' => round((float)$r['marge'], 2),
+    );
+}
+// DAYOFWEEK : 1=Dim, 2=Lun, ..., 7=Sam — on affiche Lun→Dim
+$joursNoms     = array(2 => 'Lun', 3 => 'Mar', 4 => 'Mer', 5 => 'Jeu', 6 => 'Ven', 7 => 'Sam', 1 => 'Dim');
+$labelsJourSem = array();
+$dataJourNb    = array(); $dataJourCa = array(); $dataJourMarge = array();
+foreach (array(2, 3, 4, 5, 6, 7, 1) as $j) {
+    $labelsJourSem[] = $joursNoms[$j];
+    $dataJourNb[]    = isset($jourMap[$j]) ? $jourMap[$j]['nb']    : 0;
+    $dataJourCa[]    = isset($jourMap[$j]) ? $jourMap[$j]['ca']    : 0;
+    $dataJourMarge[] = isset($jourMap[$j]) ? $jourMap[$j]['marge'] : 0;
 }
 
 require_once 'includes/header.php';
@@ -134,7 +175,7 @@ require_once 'includes/header.php';
 
 <!-- KPI -->
 <div class="row g-3 mb-4">
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="card kpi-card h-100">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="kpi-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-cash-stack"></i></div>
@@ -145,7 +186,7 @@ require_once 'includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="card kpi-card h-100">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="kpi-icon bg-success bg-opacity-10 text-success"><i class="bi bi-receipt"></i></div>
@@ -156,7 +197,7 @@ require_once 'includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="card kpi-card h-100">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="kpi-icon bg-info bg-opacity-10 text-info"><i class="bi bi-calendar-month"></i></div>
@@ -167,7 +208,7 @@ require_once 'includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="card kpi-card h-100">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="kpi-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-graph-up-arrow"></i></div>
@@ -178,7 +219,7 @@ require_once 'includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-sm-6 col-xl-3">
+    <div class="col-sm-6 col-xl">
         <div class="card kpi-card h-100">
             <div class="card-body d-flex align-items-center gap-3">
                 <div class="kpi-icon bg-secondary bg-opacity-10 text-secondary"><i class="bi bi-boxes"></i></div>
@@ -204,7 +245,7 @@ require_once 'includes/header.php';
 
 <!-- Graphiques -->
 <div class="row g-4 mb-4">
-    <div class="col-xl-8">
+    <div class="col-xl-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white fw-semibold border-bottom">
                 <i class="bi bi-graph-up me-1 text-primary"></i><?= __('chart_ca_30j') ?>
@@ -212,12 +253,34 @@ require_once 'includes/header.php';
             <div class="card-body"><canvas id="chartCa30" style="max-height:260px;"></canvas></div>
         </div>
     </div>
-    <div class="col-xl-4">
+    <div class="col-xl-3 col-md-6">
         <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white fw-semibold border-bottom">
-                <i class="bi bi-clock me-1 text-success"></i><?= __('chart_heures') ?>
+            <div class="card-header bg-white border-bottom">
+                <div class="d-flex align-items-center justify-content-between gap-1">
+                    <span class="fw-semibold small"><i class="bi bi-clock me-1 text-success"></i>Par heure</span>
+                    <div class="btn-group btn-group-sm" id="toggleHeure">
+                        <button class="btn btn-outline-secondary active" data-mode="nb">Nb</button>
+                        <button class="btn btn-outline-secondary" data-mode="ca">CA</button>
+                        <button class="btn btn-outline-secondary" data-mode="marge">Marge</button>
+                    </div>
+                </div>
             </div>
             <div class="card-body"><canvas id="chartHeure" style="max-height:260px;"></canvas></div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white border-bottom">
+                <div class="d-flex align-items-center justify-content-between gap-1">
+                    <span class="fw-semibold small"><i class="bi bi-calendar-week me-1 text-warning"></i>Par jour</span>
+                    <div class="btn-group btn-group-sm" id="toggleJour">
+                        <button class="btn btn-outline-secondary active" data-mode="nb">Nb</button>
+                        <button class="btn btn-outline-secondary" data-mode="ca">CA</button>
+                        <button class="btn btn-outline-secondary" data-mode="marge">Marge</button>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body"><canvas id="chartJourSem" style="max-height:260px;"></canvas></div>
         </div>
     </div>
 </div>
@@ -237,8 +300,8 @@ require_once 'includes/header.php';
                     <li class="list-group-item d-flex justify-content-between align-items-center py-2">
                         <span><span class="badge bg-secondary me-2"><?= $i+1 ?></span><?= htmlspecialchars($a['nom']) ?></span>
                         <span class="text-end">
-                            <span class="badge bg-primary rounded-pill"><?= (int)$a['qte_vendue'] ?> u.</span>
-                            <span class="text-muted small ms-1"><?= number_format((float)$a['ca_article'],2,',',' ') ?> <?= __('devise') ?></span>
+                            <span class="badge bg-success rounded-pill"><?= number_format((float)$a['marge_article'],2,',',' ') ?> DA</span>
+                            <span class="text-muted small ms-1"><?= (int)$a['qte_vendue'] ?> u.</span>
                         </span>
                     </li>
                     <?php endforeach; ?>
@@ -323,15 +386,71 @@ require_once 'includes/header.php';
             scales:{ y:{ beginAtZero:true }, x:{ ticks:{maxTicksLimit:10} } } }
     });
 
-    var labelsH  = <?= json_encode($labelsHeure) ?>;
-    var dataH    = <?= json_encode($dataHeure) ?>;
-    var labelNb  = <?= json_encode(__('nb_ventes')) ?>;
-    new Chart(document.getElementById('chartHeure').getContext('2d'), {
+    // --- Graphe par heure ---
+    var datasetsHeure = {
+        nb:    { data: <?= json_encode($dataHeureNb) ?>,    bg: 'rgba(25,135,84,0.65)',   border: 'rgba(25,135,84,1)',   label: 'Nb ventes' },
+        ca:    { data: <?= json_encode($dataHeureCa) ?>,    bg: 'rgba(13,110,253,0.65)',  border: 'rgba(13,110,253,1)',  label: 'CA (DA)' },
+        marge: { data: <?= json_encode($dataHeureMarge) ?>, bg: 'rgba(255,193,7,0.65)',   border: 'rgba(255,193,7,1)',   label: 'Marge (DA)' }
+    };
+    var chartHeure = new Chart(document.getElementById('chartHeure').getContext('2d'), {
         type: 'bar',
-        data: { labels: labelsH, datasets: [{ label: labelNb, data: dataH,
-            backgroundColor:'rgba(25,135,84,0.65)', borderColor:'rgba(25,135,84,1)', borderWidth:1 }] },
-        options: { responsive:true, plugins:{legend:{display:false}},
-            scales:{ y:{beginAtZero:true, ticks:{stepSize:1}} } }
+        data: { labels: <?= json_encode($labelsHeure) ?>, datasets: [{
+            label: 'Nb ventes', data: datasetsHeure.nb.data,
+            backgroundColor: datasetsHeure.nb.bg, borderColor: datasetsHeure.nb.border, borderWidth: 1
+        }]},
+        options: { responsive: true, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } } }
+    });
+    document.getElementById('toggleHeure').addEventListener('click', function(e) {
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        var mode = btn.dataset.mode;
+        var ds   = datasetsHeure[mode];
+        chartHeure.data.datasets[0].data            = ds.data;
+        chartHeure.data.datasets[0].backgroundColor = ds.bg;
+        chartHeure.data.datasets[0].borderColor     = ds.border;
+        chartHeure.data.datasets[0].label           = ds.label;
+        chartHeure.options.scales.y.ticks = mode === 'nb'
+            ? { stepSize: 1 }
+            : { callback: function(v) { return v.toLocaleString('fr-FR') + ' DA'; } };
+        chartHeure.update();
+        this.querySelectorAll('button').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+    });
+
+    // --- Graphe par jour ---
+    var jourColors = [
+        'rgba(13,110,253,0.65)', 'rgba(13,110,253,0.65)', 'rgba(13,110,253,0.65)',
+        'rgba(13,110,253,0.65)', 'rgba(13,110,253,0.65)',
+        'rgba(255,193,7,0.7)',   'rgba(220,53,69,0.65)'
+    ];
+    var datasetsJour = {
+        nb:    { data: <?= json_encode($dataJourNb) ?>,    bg: jourColors, border: 1, label: 'Nb ventes' },
+        ca:    { data: <?= json_encode($dataJourCa) ?>,    bg: jourColors, border: 1, label: 'CA (DA)' },
+        marge: { data: <?= json_encode($dataJourMarge) ?>, bg: jourColors, border: 1, label: 'Marge (DA)' }
+    };
+    var chartJour = new Chart(document.getElementById('chartJourSem').getContext('2d'), {
+        type: 'bar',
+        data: { labels: <?= json_encode($labelsJourSem) ?>, datasets: [{
+            label: 'Nb ventes', data: datasetsJour.nb.data,
+            backgroundColor: jourColors, borderWidth: 1
+        }]},
+        options: { responsive: true, plugins: { legend: { display: false } },
+            scales: { y: { beginAtZero: true } } }
+    });
+    document.getElementById('toggleJour').addEventListener('click', function(e) {
+        var btn = e.target.closest('button');
+        if (!btn) return;
+        var mode = btn.dataset.mode;
+        var ds   = datasetsJour[mode];
+        chartJour.data.datasets[0].data  = ds.data;
+        chartJour.data.datasets[0].label = ds.label;
+        chartJour.options.scales.y.ticks = mode === 'nb'
+            ? { stepSize: 1 }
+            : { callback: function(v) { return v.toLocaleString('fr-FR') + ' DA'; } };
+        chartJour.update();
+        this.querySelectorAll('button').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
     });
 })();
 </script>

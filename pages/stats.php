@@ -8,9 +8,20 @@ $assetBase  = '../';
 
 $pdo = getDB();
 
-// Période
-$dateDebut = isset($_GET['date_debut']) ? $_GET['date_debut'] : date('Y-m-01');
-$dateFin   = isset($_GET['date_fin'])   ? $_GET['date_fin']   : date('Y-m-d');
+// Période — par défaut : les 30 derniers jours avec données
+if (isset($_GET['date_debut']) || isset($_GET['date_fin'])) {
+    $dateDebut = isset($_GET['date_debut']) ? $_GET['date_debut'] : date('Y-m-01');
+    $dateFin   = isset($_GET['date_fin'])   ? $_GET['date_fin']   : date('Y-m-d');
+} else {
+    $dernierDate = $pdo->query("SELECT DATE(MAX(dateVente)) FROM vente")->fetchColumn();
+    if ($dernierDate) {
+        $dateFin   = $dernierDate;
+        $dateDebut = date('Y-m-d', strtotime($dernierDate . ' -29 days'));
+    } else {
+        $dateDebut = date('Y-m-01');
+        $dateFin   = date('Y-m-d');
+    }
+}
 
 // ── Graphique 1 : CA par jour sur la période ─────────────────────────────
 $stmtCaJour = $pdo->prepare("
@@ -53,26 +64,25 @@ foreach ($topRows as $r) {
     $dataTop[]   = round((float)$r['ca_article'], 2);
 }
 
-// ── Graphique 3 : CA par catégorie ───────────────────────────────────────
-$stmtCat = $pdo->prepare("
-    SELECT a.categorie, SUM(av.quantite * av.prixVenteUnite) AS ca_cat
+// ── Graphique 3 : Top 10 articles par marge ──────────────────────────────
+$stmtTopMarge = $pdo->prepare("
+    SELECT av.nom AS article_nom,
+           SUM(av.quantite * (av.prixVenteUnite - av.prixAchatUnite)) AS marge_article
     FROM articlevente av
     JOIN vente v ON v.idVente = av.idVente
-    JOIN article a ON a.code = av.code
     WHERE DATE(v.dateVente) BETWEEN ? AND ?
-      AND a.categorie IS NOT NULL AND a.categorie != ''
-    GROUP BY a.categorie
-    ORDER BY ca_cat DESC
+    GROUP BY av.code, av.nom
+    ORDER BY marge_article DESC
+    LIMIT 10
 ");
-$stmtCat->execute(array($dateDebut, $dateFin));
-$catRows = $stmtCat->fetchAll();
+$stmtTopMarge->execute(array($dateDebut, $dateFin));
+$topMargeRows = $stmtTopMarge->fetchAll();
 
-$labelsCat  = array();
-$dataCat    = array();
-$colorsCat  = array('#0d6efd','#198754','#0dcaf0','#ffc107','#dc3545','#6f42c1','#fd7e14','#20c997','#6c757d','#e83e8c');
-foreach ($catRows as $r) {
-    $labelsCat[] = $r['categorie'];
-    $dataCat[]   = round((float)$r['ca_cat'], 2);
+$labelsTopMarge = array();
+$dataTopMarge   = array();
+foreach ($topMargeRows as $r) {
+    $labelsTopMarge[] = $r['article_nom'];
+    $dataTopMarge[]   = round((float)$r['marge_article'], 2);
 }
 
 // ── Graphique 4 : Comparaison mois courant vs mois précédent ─────────────
@@ -179,17 +189,17 @@ require_once dirname(__FILE__) . '/../includes/header.php';
         </div>
     </div>
 
-    <!-- Graphique 3 : CA par catégorie -->
+    <!-- Graphique 3 : Top 10 articles par marge -->
     <div class="col-xl-4">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white fw-semibold border-bottom">
-                <i class="bi bi-pie-chart me-1 text-info"></i>CA par catégorie
+                <i class="bi bi-trophy me-1 text-success"></i>Top 10 articles par marge
             </div>
-            <div class="card-body d-flex align-items-center justify-content-center">
-                <?php if (empty($catRows)): ?>
+            <div class="card-body">
+                <?php if (empty($topMargeRows)): ?>
                     <p class="text-muted text-center small">Aucune donnée.</p>
                 <?php else: ?>
-                <canvas id="chartCategories" style="max-height:280px;"></canvas>
+                <canvas id="chartTopMarge" style="max-height:280px;"></canvas>
                 <?php endif; ?>
             </div>
         </div>
@@ -356,32 +366,31 @@ require_once dirname(__FILE__) . '/../includes/header.php';
     });
     <?php endif; ?>
 
-    // Graphique 3 : Doughnut catégories
-    <?php if (!empty($catRows)): ?>
-    var labelsCat   = <?= json_encode($labelsCat) ?>;
-    var dataCat     = <?= json_encode($dataCat) ?>;
-    var colorsCat   = <?= json_encode(array_slice($colorsCat, 0, count($catRows))) ?>;
+    // Graphique 3 : Top 10 articles par marge
+    <?php if (!empty($topMargeRows)): ?>
+    var labelsTopMarge = <?= json_encode($labelsTopMarge) ?>;
+    var dataTopMarge   = <?= json_encode($dataTopMarge) ?>;
 
-    new Chart(document.getElementById('chartCategories').getContext('2d'), {
-        type: 'doughnut',
+    new Chart(document.getElementById('chartTopMarge').getContext('2d'), {
+        type: 'bar',
         data: {
-            labels: labelsCat,
+            labels: labelsTopMarge,
             datasets: [{
-                data: dataCat,
-                backgroundColor: colorsCat,
-                borderWidth: 2
+                label: 'Marge (DA)',
+                data: dataTopMarge,
+                backgroundColor: 'rgba(25,135,84,0.7)',
+                borderColor: 'rgba(25,135,84,1)',
+                borderWidth: 1
             }]
         },
         options: {
+            indexAxis: 'y',
             responsive: true,
-            plugins: {
-                legend: { position: 'bottom' },
-                tooltip: {
-                    callbacks: {
-                        label: function(ctx) {
-                            return ctx.label + ' : ' + ctx.parsed.toFixed(2) + ' DA';
-                        }
-                    }
+            plugins: { legend: { display: false } },
+            scales: {
+                x: {
+                    beginAtZero: true,
+                    ticks: { callback: function(v) { return v.toLocaleString('fr-FR') + ' DA'; } }
                 }
             }
         }
