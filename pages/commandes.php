@@ -14,48 +14,51 @@ $dateFin   = isset($_GET['date_fin'])   ? $_GET['date_fin']   : date('Y-m-d');
 $vendeur   = trim(isset($_GET['vendeur']) ? $_GET['vendeur'] : '');
 $codeArt   = trim(isset($_GET['code'])   ? $_GET['code']    : '');
 
-$where  = array('DATE(v.dateVente) BETWEEN ? AND ?');
-$params = array($dateDebut, $dateFin);
+// Conditions sur vente directement
+$whereV  = array('DATE(v.dateVente) BETWEEN ? AND ?');
+$paramsV = array($dateDebut, $dateFin);
 
 if ($vendeur !== '') {
-    $where[]  = 'v.loginVendeur = ?';
-    $params[] = $vendeur;
+    $whereV[]  = 'v.loginVendeur = ?';
+    $paramsV[] = $vendeur;
 }
+// Filtre article : sous-requête pour ne pas polluer les agrégats
 if ($codeArt !== '') {
-    $where[]  = 'av.code = ?';
-    $params[] = $codeArt;
+    $whereV[]  = 'v.idVente IN (SELECT idVente FROM articlevente WHERE code = ?)';
+    $paramsV[] = $codeArt;
 }
-$whereSQL = implode(' AND ', $where);
+$whereSQL = implode(' AND ', $whereV);
 
 // ── Ventes de la période ─────────────────────────────────────
 $stmtVentes = $pdo->prepare("
     SELECT v.idVente,
            v.dateVente,
            v.totale,
-           v.marge,
            v.loginVendeur,
            v.recu,
            v.rendu,
-           COUNT(DISTINCT av.id) AS nb_articles
+           (SELECT COUNT(*) FROM articlevente WHERE idVente = v.idVente) AS nb_articles,
+           (SELECT COALESCE(SUM(quantite * (prixVenteUnite - prixAchatUnite)), 0)
+            FROM articlevente WHERE idVente = v.idVente) AS marge
     FROM vente v
-    JOIN articlevente av ON av.idVente = v.idVente
     WHERE $whereSQL
-    GROUP BY v.idVente, v.dateVente, v.totale, v.marge, v.loginVendeur, v.recu, v.rendu
     ORDER BY v.dateVente DESC
 ");
-$stmtVentes->execute($params);
+$stmtVentes->execute($paramsV);
 $ventes = $stmtVentes->fetchAll();
 
 // ── Totaux ───────────────────────────────────────────────────
 $stmtTotaux = $pdo->prepare("
     SELECT COALESCE(SUM(v.totale), 0) AS ca_total,
-           COALESCE(SUM(v.marge),  0) AS marge_total,
-           COUNT(DISTINCT v.idVente)  AS nb_ventes
+           COALESCE(SUM(
+               (SELECT COALESCE(SUM(quantite * (prixVenteUnite - prixAchatUnite)), 0)
+                FROM articlevente WHERE idVente = v.idVente)
+           ), 0) AS marge_total,
+           COUNT(*) AS nb_ventes
     FROM vente v
-    JOIN articlevente av ON av.idVente = v.idVente
     WHERE $whereSQL
 ");
-$stmtTotaux->execute($params);
+$stmtTotaux->execute($paramsV);
 $totaux = $stmtTotaux->fetch();
 
 // ── Listes pour filtres ──────────────────────────────────────

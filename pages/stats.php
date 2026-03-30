@@ -121,19 +121,23 @@ $labelsJours     = range(1, 31);
 $dataMoisCourantArr = array_values($dataMoisCourant);
 $dataMoisPrecArr    = array_values($dataMoisPrec);
 
-// ── Tableau récapitulatif par semaine ─────────────────────────────────────
-$semaines = $pdo->query("
-    SELECT YEARWEEK(dateVente) AS semaine,
-           MIN(DATE(dateVente)) AS debut,
-           MAX(DATE(dateVente)) AS fin,
+// ── Tableau récapitulatif par jour (30 derniers jours) ────────────────────
+$dernierDate30 = $pdo->query("SELECT DATE(MAX(dateVente)) FROM vente")->fetchColumn();
+$joursDebut = $dernierDate30 ? date('Y-m-d', strtotime($dernierDate30 . ' -29 days')) : date('Y-m-d', strtotime('-29 days'));
+$joursFin   = $dernierDate30 ? $dernierDate30 : date('Y-m-d');
+
+$stmtJours = $pdo->prepare("
+    SELECT DATE(dateVente) AS jour,
            SUM(totale) AS ca,
            SUM(marge) AS marge,
            COUNT(*) AS nb_ventes
     FROM vente
-    GROUP BY YEARWEEK(dateVente)
-    ORDER BY semaine DESC
-    LIMIT 12
-")->fetchAll();
+    WHERE DATE(dateVente) BETWEEN ? AND ?
+    GROUP BY DATE(dateVente)
+    ORDER BY jour DESC
+");
+$stmtJours->execute(array($joursDebut, $joursFin));
+$jours = $stmtJours->fetchAll();
 
 require_once dirname(__FILE__) . '/../includes/header.php';
 ?>
@@ -174,10 +178,10 @@ require_once dirname(__FILE__) . '/../includes/header.php';
     </div>
 </div>
 
-<!-- Graphiques ligne 1 -->
+<!-- Graphiques 2x2 -->
 <div class="row g-4 mb-4">
     <!-- Graphique 1 : CA par jour -->
-    <div class="col-xl-8">
+    <div class="col-xl-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white fw-semibold border-bottom">
                 <i class="bi bi-graph-up me-1 text-primary"></i>
@@ -190,7 +194,7 @@ require_once dirname(__FILE__) . '/../includes/header.php';
     </div>
 
     <!-- Graphique 3 : Top 10 articles par marge -->
-    <div class="col-xl-4">
+    <div class="col-xl-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white fw-semibold border-bottom">
                 <i class="bi bi-trophy me-1 text-success"></i>Top 10 articles par marge
@@ -204,25 +208,6 @@ require_once dirname(__FILE__) . '/../includes/header.php';
             </div>
         </div>
     </div>
-</div>
-
-<!-- Graphiques ligne 2 -->
-<div class="row g-4 mb-4">
-    <!-- Graphique 2 : Top 10 articles -->
-    <div class="col-xl-6">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white fw-semibold border-bottom">
-                <i class="bi bi-trophy me-1 text-warning"></i>Top 10 articles par CA
-            </div>
-            <div class="card-body">
-                <?php if (empty($topRows)): ?>
-                    <p class="text-muted text-center small">Aucune donnée.</p>
-                <?php else: ?>
-                <canvas id="chartTopArticles" style="max-height:300px;"></canvas>
-                <?php endif; ?>
-            </div>
-        </div>
-    </div>
 
     <!-- Graphique 4 : Comparaison mois -->
     <div class="col-xl-6">
@@ -232,28 +217,42 @@ require_once dirname(__FILE__) . '/../includes/header.php';
                 Mois courant vs mois précédent
             </div>
             <div class="card-body">
-                <canvas id="chartComparaison" style="max-height:300px;"></canvas>
+                <canvas id="chartComparaison" style="max-height:280px;"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <!-- Graphique 2 : Top 10 articles par CA -->
+    <div class="col-xl-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold border-bottom">
+                <i class="bi bi-trophy me-1 text-warning"></i>Top 10 articles par CA
+            </div>
+            <div class="card-body">
+                <?php if (empty($topRows)): ?>
+                    <p class="text-muted text-center small">Aucune donnée.</p>
+                <?php else: ?>
+                <canvas id="chartTopArticles" style="max-height:280px;"></canvas>
+                <?php endif; ?>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Tableau récapitulatif par semaine -->
+<!-- Tableau récapitulatif par jour -->
 <div class="card border-0 shadow-sm mb-4">
     <div class="card-header bg-white fw-semibold border-bottom">
-        <i class="bi bi-calendar-week me-1 text-primary"></i>Récapitulatif par semaine (12 dernières semaines)
+        <i class="bi bi-calendar3 me-1 text-primary"></i>Récapitulatif par jour (30 derniers jours)
     </div>
     <div class="card-body p-0">
-        <?php if (empty($semaines)): ?>
+        <?php if (empty($jours)): ?>
             <p class="text-muted text-center py-4">Aucune donnée.</p>
         <?php else: ?>
         <div class="table-responsive">
             <table class="table table-hover table-sm mb-0 align-middle">
                 <thead class="table-light">
                     <tr>
-                        <th>Semaine</th>
-                        <th>Début</th>
-                        <th>Fin</th>
+                        <th>Date</th>
                         <th class="text-center">Nb ventes</th>
                         <th class="text-end">CA</th>
                         <th class="text-end">Marge</th>
@@ -262,20 +261,18 @@ require_once dirname(__FILE__) . '/../includes/header.php';
                     </tr>
                 </thead>
                 <tbody>
-                    <?php foreach ($semaines as $s): ?>
+                    <?php foreach ($jours as $j): ?>
                     <?php
-                    $ca    = (float)$s['ca'];
-                    $marge = (float)$s['marge'];
+                    $ca    = (float)$j['ca'];
+                    $marge = (float)$j['marge'];
                     $taux  = $ca > 0 ? ($marge / $ca * 100) : 0;
-                    $panier = $s['nb_ventes'] > 0 ? ($ca / $s['nb_ventes']) : 0;
+                    $panier = $j['nb_ventes'] > 0 ? ($ca / $j['nb_ventes']) : 0;
                     $tauxClass = $taux >= 20 ? 'text-success' : ($taux >= 10 ? 'text-warning' : 'text-danger');
                     ?>
                     <tr>
-                        <td class="text-muted small"><?= htmlspecialchars($s['semaine']) ?></td>
-                        <td class="small"><?= htmlspecialchars(date('d/m/Y', strtotime($s['debut']))) ?></td>
-                        <td class="small"><?= htmlspecialchars(date('d/m/Y', strtotime($s['fin']))) ?></td>
+                        <td class="fw-semibold small"><?= htmlspecialchars(date('d/m/Y', strtotime($j['jour']))) ?></td>
                         <td class="text-center">
-                            <span class="badge bg-primary rounded-pill"><?= (int)$s['nb_ventes'] ?></span>
+                            <span class="badge bg-primary rounded-pill"><?= (int)$j['nb_ventes'] ?></span>
                         </td>
                         <td class="text-end fw-semibold"><?= number_format($ca, 2, ',', ' ') ?> DA</td>
                         <td class="text-end text-success"><?= number_format($marge, 2, ',', ' ') ?> DA</td>
