@@ -139,6 +139,20 @@ $stmtJours = $pdo->prepare("
 $stmtJours->execute(array($joursDebut, $joursFin));
 $jours = $stmtJours->fetchAll();
 
+// ── Tableau récapitulatif par mois (12 derniers mois) ─────────────────────
+$mois = $pdo->query("
+    SELECT DATE_FORMAT(dateVente, '%Y-%m') AS mois,
+           MIN(DATE(dateVente))            AS debut,
+           MAX(DATE(dateVente))            AS fin,
+           SUM(totale)                     AS ca,
+           SUM(marge)                      AS marge,
+           COUNT(*)                        AS nb_ventes
+    FROM vente
+    GROUP BY DATE_FORMAT(dateVente, '%Y-%m')
+    ORDER BY mois DESC
+    LIMIT 12
+")->fetchAll();
+
 require_once dirname(__FILE__) . '/../includes/header.php';
 ?>
 
@@ -281,6 +295,86 @@ require_once dirname(__FILE__) . '/../includes/header.php';
                     </tr>
                     <?php endforeach; ?>
                 </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
+    </div>
+</div>
+
+<!-- Tableau récapitulatif par mois -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-calendar2-month me-1 text-primary"></i>Récapitulatif par mois (12 derniers mois)
+    </div>
+    <div class="card-body p-0">
+        <?php if (empty($mois)): ?>
+            <p class="text-muted text-center py-4">Aucune donnée.</p>
+        <?php else: ?>
+        <?php
+        // Calcul totaux pour la ligne de pied de tableau
+        $totalCaMois    = 0;
+        $totalMargeMois = 0;
+        $totalVentesMois = 0;
+        foreach ($mois as $m) {
+            $totalCaMois    += (float)$m['ca'];
+            $totalMargeMois += (float)$m['marge'];
+            $totalVentesMois += (int)$m['nb_ventes'];
+        }
+        $totalTauxMois  = $totalCaMois > 0 ? ($totalMargeMois / $totalCaMois * 100) : 0;
+        $totalPanierMois = $totalVentesMois > 0 ? ($totalCaMois / $totalVentesMois) : 0;
+        ?>
+        <div class="table-responsive">
+            <table class="table table-hover table-sm mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>Mois</th>
+                        <th>Période</th>
+                        <th class="text-center">Nb ventes</th>
+                        <th class="text-end">CA</th>
+                        <th class="text-end">Marge</th>
+                        <th class="text-end">Taux marge</th>
+                        <th class="text-end">Panier moyen</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($mois as $m): ?>
+                    <?php
+                    $ca     = (float)$m['ca'];
+                    $marge  = (float)$m['marge'];
+                    $taux   = $ca > 0 ? ($marge / $ca * 100) : 0;
+                    $panier = $m['nb_ventes'] > 0 ? ($ca / $m['nb_ventes']) : 0;
+                    $tauxClass = $taux >= 20 ? 'text-success' : ($taux >= 10 ? 'text-warning' : 'text-danger');
+                    $moisLabel = date('F Y', strtotime($m['mois'] . '-01'));
+                    ?>
+                    <tr>
+                        <td class="fw-semibold"><?= htmlspecialchars($moisLabel) ?></td>
+                        <td class="text-muted small">
+                            <?= date('d/m', strtotime($m['debut'])) ?> – <?= date('d/m/Y', strtotime($m['fin'])) ?>
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-primary rounded-pill"><?= (int)$m['nb_ventes'] ?></span>
+                        </td>
+                        <td class="text-end fw-semibold"><?= number_format($ca, 2, ',', ' ') ?> DA</td>
+                        <td class="text-end text-success"><?= number_format($marge, 2, ',', ' ') ?> DA</td>
+                        <td class="text-end fw-bold <?= $tauxClass ?>"><?= number_format($taux, 1, ',', '') ?> %</td>
+                        <td class="text-end text-muted small"><?= number_format($panier, 2, ',', ' ') ?> DA</td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+                <tfoot class="table-light fw-bold">
+                    <tr>
+                        <td colspan="2">Total</td>
+                        <td class="text-center">
+                            <span class="badge bg-secondary rounded-pill"><?= $totalVentesMois ?></span>
+                        </td>
+                        <td class="text-end"><?= number_format($totalCaMois, 2, ',', ' ') ?> DA</td>
+                        <td class="text-end text-success"><?= number_format($totalMargeMois, 2, ',', ' ') ?> DA</td>
+                        <td class="text-end <?= $totalTauxMois >= 20 ? 'text-success' : ($totalTauxMois >= 10 ? 'text-warning' : 'text-danger') ?>">
+                            <?= number_format($totalTauxMois, 1, ',', '') ?> %
+                        </td>
+                        <td class="text-end text-muted"><?= number_format($totalPanierMois, 2, ',', ' ') ?> DA</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
         <?php endif; ?>

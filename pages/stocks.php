@@ -17,7 +17,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['action'])) {
     $nombreUnite = (int)(isset($_POST['nombreUnite']) ? $_POST['nombreUnite'] : 0);
     $prixUnite   = (float)str_replace(',', '.', isset($_POST['prixUnite']) ? $_POST['prixUnite'] : '0');
 
-    if ($codeArticle === '' || $nombreUnite <= 0) {
+    if ($action === 'modifier_article') {
+        // Modification directe stock + seuil alerte
+        $nouveauStock = (int)(isset($_POST['nouveauStock']) ? $_POST['nouveauStock'] : 0);
+        $nouveauSeuil = (int)(isset($_POST['nouveauSeuil']) ? $_POST['nouveauSeuil'] : 0);
+        if ($codeArticle === '') {
+            $message = 'Code article manquant.';
+            $messageType = 'danger';
+        } else {
+            $pdo->prepare("UPDATE article SET stock = ?, seuilAlerte = ? WHERE code = ?")
+                ->execute(array($nouveauStock, $nouveauSeuil, $codeArticle));
+            $stmtNom = $pdo->prepare("SELECT nom FROM article WHERE code = ?");
+            $stmtNom->execute(array($codeArticle));
+            $nomArticle = $stmtNom->fetchColumn();
+            $message = "Article \"$nomArticle\" mis a jour : stock=$nouveauStock, seuil=$nouveauSeuil.";
+        }
+    } elseif ($codeArticle === '' || $nombreUnite <= 0) {
         $message     = 'Article et quantité obligatoires.';
         $messageType = 'danger';
     } else {
@@ -126,14 +141,15 @@ require_once '../includes/header.php';
                             <tr>
                                 <th>Article</th>
                                 <th>Catégorie</th>
-                                <th class="text-center">Stock</th>
+                                <th class="text-center">Stock actuel</th>
                                 <th class="text-center">Seuil alerte</th>
                                 <th class="text-center">État</th>
+                                <th class="text-center">Modifier</th>
                             </tr>
                         </thead>
                         <tbody>
                             <?php if (empty($articles)): ?>
-                            <tr><td colspan="5" class="text-center text-muted py-4">Aucun article</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted py-4">Aucun article</td></tr>
                             <?php else: ?>
                             <?php foreach ($articles as $a):
                                 $s = (int)$a['stock'];
@@ -155,6 +171,18 @@ require_once '../includes/header.php';
                                     <?php else: ?>
                                         <span class="badge badge-stock-ok px-2 py-1">OK</span>
                                     <?php endif; ?>
+                                </td>
+                                <td class="text-center">
+                                    <button class="btn btn-sm btn-outline-primary btn-modifier-article"
+                                            data-code="<?= htmlspecialchars($a['code']) ?>"
+                                            data-nom="<?= htmlspecialchars($a['nom']) ?>"
+                                            data-stock="<?= $s ?>"
+                                            data-seuil="<?= $seuil ?>"
+                                            data-bs-toggle="modal"
+                                            data-bs-target="#modifierArticleModal"
+                                            title="Modifier stock et seuil">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
                                 </td>
                             </tr>
                             <?php endforeach; ?>
@@ -277,5 +305,53 @@ require_once '../includes/header.php';
         </div>
     </div>
 </div>
+
+<!-- Modal modifier stock + seuil alerte -->
+<div class="modal fade" id="modifierArticleModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <div class="modal-content">
+            <form method="post">
+                <input type="hidden" name="action" value="modifier_article">
+                <input type="hidden" name="codeArticle" id="modifCode">
+                <div class="modal-header">
+                    <h5 class="modal-title fs-6 fw-bold">
+                        <i class="bi bi-pencil-square text-primary me-1"></i>Modifier l'article
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3" id="modifNom"></p>
+                    <div class="mb-3">
+                        <label class="form-label small">Stock actuel <span class="text-danger">*</span></label>
+                        <input type="number" name="nouveauStock" id="modifStock"
+                               class="form-control" min="0" required>
+                    </div>
+                    <div>
+                        <label class="form-label small">Seuil alerte <span class="text-danger">*</span></label>
+                        <input type="number" name="nouveauSeuil" id="modifSeuil"
+                               class="form-control" min="0" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Annuler</button>
+                    <button type="submit" class="btn btn-primary btn-sm">
+                        <i class="bi bi-check-lg me-1"></i>Enregistrer
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+document.querySelectorAll('.btn-modifier-article').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+        document.getElementById('modifCode').value  = this.dataset.code;
+        document.getElementById('modifNom').textContent = this.dataset.nom;
+        document.getElementById('modifStock').value = this.dataset.stock;
+        document.getElementById('modifSeuil').value = this.dataset.seuil;
+    });
+});
+</script>
 
 <?php require_once '../includes/footer.php'; ?>
