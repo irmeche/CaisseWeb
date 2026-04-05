@@ -67,11 +67,6 @@ $alertesListe = $pdo->query("
     WHERE stock <= seuilAlerte ORDER BY stock ASC LIMIT 10
 ")->fetchAll();
 
-$dernieresVentes = $pdo->query("
-    SELECT idVente, dateVente, totale, loginVendeur
-    FROM vente ORDER BY dateVente DESC LIMIT 8
-")->fetchAll();
-
 // Graphique CA 30 jours
 $ca30Rows = $pdo->query("
     SELECT DATE(dateVente) AS jour, SUM(totale) AS ca
@@ -286,7 +281,7 @@ require_once 'includes/header.php';
 </div>
 
 <div class="row g-3">
-    <div class="col-lg-4">
+    <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white fw-semibold border-bottom">
                 <i class="bi bi-bar-chart me-1 text-primary"></i><?= __('top_articles_auj') ?> — <?= htmlspecialchars($periodeLabel) ?>
@@ -311,7 +306,7 @@ require_once 'includes/header.php';
         </div>
     </div>
 
-    <div class="col-lg-4">
+    <div class="col-lg-6">
         <div class="card border-0 shadow-sm h-100">
             <div class="card-header bg-white fw-semibold border-bottom">
                 <i class="bi bi-exclamation-triangle me-1 text-warning"></i><?= __('alertes_stock_titre') ?>
@@ -340,35 +335,6 @@ require_once 'includes/header.php';
         </div>
     </div>
 
-    <div class="col-lg-4">
-        <div class="card border-0 shadow-sm h-100">
-            <div class="card-header bg-white fw-semibold border-bottom">
-                <i class="bi bi-clock-history me-1 text-success"></i><?= __('dernieres_ventes') ?>
-            </div>
-            <div class="card-body p-0">
-                <?php if (empty($dernieresVentes)): ?>
-                    <p class="text-muted text-center py-4 small"><?= __('aucune_vente') ?></p>
-                <?php else: ?>
-                <ul class="list-group list-group-flush">
-                    <?php foreach ($dernieresVentes as $v): ?>
-                    <li class="list-group-item d-flex justify-content-between align-items-center py-2">
-                        <span class="text-muted small">
-                            <?= htmlspecialchars(date('d/m H:i', strtotime($v['dateVente']))) ?>
-                            <?php if ($v['loginVendeur']): ?>
-                                <span class="badge bg-light text-dark border ms-1"><?= htmlspecialchars($v['loginVendeur']) ?></span>
-                            <?php endif; ?>
-                        </span>
-                        <span class="fw-semibold"><?= number_format((float)$v['totale'],2,',',' ') ?> <?= __('devise') ?></span>
-                    </li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </div>
-            <div class="card-footer bg-white border-top">
-                <a href="pages/commandes.php" class="btn btn-sm btn-outline-primary w-100"><?= __('voir_toutes_ventes') ?> <i class="bi bi-arrow-right ms-1"></i></a>
-            </div>
-        </div>
-    </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>

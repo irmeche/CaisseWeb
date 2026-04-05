@@ -9,7 +9,7 @@ $assetBase  = '../';
 $pdo = getDB();
 
 // ── Filtres ──────────────────────────────────────────────────
-$dateDebut = isset($_GET['date_debut']) ? $_GET['date_debut'] : date('Y-m-01');
+$dateDebut = isset($_GET['date_debut']) ? $_GET['date_debut'] : date('Y-m-d');
 $dateFin   = isset($_GET['date_fin'])   ? $_GET['date_fin']   : date('Y-m-d');
 $vendeur   = trim(isset($_GET['vendeur']) ? $_GET['vendeur'] : '');
 $codeArt   = trim(isset($_GET['code'])   ? $_GET['code']    : '');
@@ -60,6 +60,12 @@ $stmtTotaux = $pdo->prepare("
 ");
 $stmtTotaux->execute($paramsV);
 $totaux = $stmtTotaux->fetch();
+
+// ── Dernières ventes ─────────────────────────────────────────
+$dernieresVentes = $pdo->query("
+    SELECT idVente, dateVente, totale, loginVendeur
+    FROM vente ORDER BY dateVente DESC LIMIT 10
+")->fetchAll();
 
 // ── Listes pour filtres ──────────────────────────────────────
 $vendeurs = $pdo->query("
@@ -205,6 +211,56 @@ require_once '../includes/header.php';
                 </tbody>
             </table>
         </div>
+    </div>
+</div>
+
+<!-- Dernières ventes -->
+<div class="card border-0 shadow-sm mt-4">
+    <div class="card-header bg-white fw-semibold border-bottom">
+        <i class="bi bi-clock-history me-1 text-success"></i>Dernières ventes
+    </div>
+    <div class="card-body p-0">
+        <?php if (empty($dernieresVentes)): ?>
+            <p class="text-muted text-center py-4 small">Aucune vente enregistrée.</p>
+        <?php else: ?>
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Date / Heure</th>
+                        <th>Vendeur</th>
+                        <th class="text-end">Total (DA)</th>
+                        <th class="text-center">Détail</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($dernieresVentes as $v): ?>
+                    <tr>
+                        <td class="text-muted small"><?= (int)$v['idVente'] ?></td>
+                        <td><?= htmlspecialchars(date('d/m/Y H:i', strtotime($v['dateVente']))) ?></td>
+                        <td>
+                            <?php if ($v['loginVendeur']): ?>
+                                <span class="badge bg-light text-dark border"><?= htmlspecialchars($v['loginVendeur']) ?></span>
+                            <?php else: ?>
+                                <span class="text-muted">—</span>
+                            <?php endif; ?>
+                        </td>
+                        <td class="text-end fw-semibold"><?= number_format((float)$v['totale'], 2, ',', ' ') ?></td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#detailModal"
+                                    data-vente-id="<?= $v['idVente'] ?>">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+        <?php endif; ?>
     </div>
 </div>
 

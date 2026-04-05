@@ -18,9 +18,11 @@
 $_ap     = isset($activePage) ? $activePage : '';
 $_base   = isset($assetBase)  ? $assetBase  : '';
 
-$_ventesActif   = in_array($_ap, array('commandes', 'vendeurs'));
-$_produitsActif = in_array($_ap, array('prix', 'inventaire', 'historique_prix'));
-$_financesActif = in_array($_ap, array('marges', 'stats'));
+$_ventesActif        = in_array($_ap, array('commandes'));
+$_produitsActif      = in_array($_ap, array('prix', 'historique_prix'));
+$_financesActif      = in_array($_ap, array('marges', 'stats'));
+$_utilisateursActif  = in_array($_ap, array('clients', 'vendeurs'));
+$_stocksActif        = in_array($_ap, array('stocks', 'inventaire'));
 ?>
 
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -42,21 +44,11 @@ $_financesActif = in_array($_ap, array('marges', 'stats'));
                     </a>
                 </li>
 
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle <?= $_ventesActif ? 'active' : '' ?>"
-                       href="#" role="button" data-bs-toggle="dropdown">
+                <li class="nav-item">
+                    <a class="nav-link <?= $_ap === 'commandes' ? 'active' : '' ?>"
+                       href="<?= $_base ?>pages/commandes.php">
                         <i class="bi bi-receipt me-1"></i>Ventes
                     </a>
-                    <ul class="dropdown-menu dropdown-menu-dark">
-                        <li><a class="dropdown-item <?= $_ap === 'commandes' ? 'active' : '' ?>"
-                               href="<?= $_base ?>pages/commandes.php">
-                            <i class="bi bi-list-ul me-1"></i>Commandes
-                        </a></li>
-                        <li><a class="dropdown-item <?= $_ap === 'vendeurs' ? 'active' : '' ?>"
-                               href="<?= $_base ?>pages/vendeurs.php">
-                            <i class="bi bi-people me-1"></i>Vendeurs
-                        </a></li>
-                    </ul>
                 </li>
 
                 <li class="nav-item dropdown">
@@ -68,10 +60,6 @@ $_financesActif = in_array($_ap, array('marges', 'stats'));
                         <li><a class="dropdown-item <?= $_ap === 'prix' ? 'active' : '' ?>"
                                href="<?= $_base ?>pages/prix.php">
                             <i class="bi bi-currency-exchange me-1"></i>Prix produits
-                        </a></li>
-                        <li><a class="dropdown-item <?= $_ap === 'inventaire' ? 'active' : '' ?>"
-                               href="<?= $_base ?>pages/inventaire.php">
-                            <i class="bi bi-clipboard-check me-1"></i>Inventaire
                         </a></li>
                         <li><a class="dropdown-item <?= $_ap === 'historique_prix' ? 'active' : '' ?>"
                                href="<?= $_base ?>pages/historique_prix.php">
@@ -97,18 +85,38 @@ $_financesActif = in_array($_ap, array('marges', 'stats'));
                     </ul>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link <?= $_ap === 'clients' ? 'active' : '' ?>"
-                       href="<?= $_base ?>pages/clients.php">
-                        <i class="bi bi-person-lines-fill me-1"></i>Clients
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle <?= $_utilisateursActif ? 'active' : '' ?>"
+                       href="#" role="button" data-bs-toggle="dropdown">
+                        <i class="bi bi-people me-1"></i>Utilisateurs
                     </a>
+                    <ul class="dropdown-menu dropdown-menu-dark">
+                        <li><a class="dropdown-item <?= $_ap === 'clients' ? 'active' : '' ?>"
+                               href="<?= $_base ?>pages/clients.php">
+                            <i class="bi bi-person-lines-fill me-1"></i>Clients
+                        </a></li>
+                        <li><a class="dropdown-item <?= $_ap === 'vendeurs' ? 'active' : '' ?>"
+                               href="<?= $_base ?>pages/vendeurs.php">
+                            <i class="bi bi-person-badge me-1"></i>Vendeurs
+                        </a></li>
+                    </ul>
                 </li>
 
-                <li class="nav-item">
-                    <a class="nav-link <?= $_ap === 'stocks' ? 'active' : '' ?>"
-                       href="<?= $_base ?>pages/stocks.php">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle <?= $_stocksActif ? 'active' : '' ?>"
+                       href="#" role="button" data-bs-toggle="dropdown">
                         <i class="bi bi-box-seam me-1"></i>Stocks
                     </a>
+                    <ul class="dropdown-menu dropdown-menu-dark">
+                        <li><a class="dropdown-item <?= $_ap === 'stocks' ? 'active' : '' ?>"
+                               href="<?= $_base ?>pages/stocks.php">
+                            <i class="bi bi-box-seam me-1"></i>Gestion des stocks
+                        </a></li>
+                        <li><a class="dropdown-item <?= $_ap === 'inventaire' ? 'active' : '' ?>"
+                               href="<?= $_base ?>pages/inventaire.php">
+                            <i class="bi bi-clipboard-check me-1"></i>Inventaire
+                        </a></li>
+                    </ul>
                 </li>
 
             </ul>
